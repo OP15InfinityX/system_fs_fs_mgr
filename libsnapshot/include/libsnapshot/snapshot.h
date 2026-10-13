@@ -192,9 +192,6 @@ class ISnapshotManager {
     // UpdateState is None, or no snapshots have been created.
     virtual bool UpdateUsesSnapuserd() = 0;
 
-    // Returns true if userspace snapshots is enabled for the current update.
-    virtual bool UpdateUsesUserSnapshots() = 0;
-
     // Create necessary COW device / files for OTA clients. New logical partitions will be added to
     // group "cow" in target_metadata. Regions of partitions of current_metadata will be
     // "write-protected" and snapshotted.
@@ -338,11 +335,8 @@ class SnapshotManager final : public ISnapshotManager {
     // after loading selinux policy.
     bool PrepareSnapuserdArgsForSelinux(std::vector<std::string>* snapuserd_argv);
 
-    // If snapuserd from first stage init was started from system partition.
-    bool MarkSnapuserdFromSystem();
-
     // Detach dm-user devices from the first stage snapuserd. Load
-    // new dm-user tables after loading selinux policy.
+    // new userspace tables after loading selinux policy.
     bool DetachFirstStageSnapuserdForSelinux();
 
     // Perform the transition from the selinux stage of snapuserd into the
@@ -364,7 +358,6 @@ class SnapshotManager final : public ISnapshotManager {
                                    const std::function<bool()>& before_cancel = {}) override;
     UpdateState GetUpdateState(double* progress = nullptr) override;
     bool UpdateUsesSnapuserd() override;
-    bool UpdateUsesUserSnapshots() override;
     Return CreateUpdateSnapshots(const DeltaArchiveManifest& manifest) override;
     bool MapUpdateSnapshot(const CreateLogicalPartitionParams& params,
                            std::string* snapshot_path) override;
@@ -429,7 +422,6 @@ class SnapshotManager final : public ISnapshotManager {
     FRIEND_TEST(SnapshotTest, FlashSuperDuringMerge);
     FRIEND_TEST(SnapshotTest, FlashSuperDuringUpdate);
     FRIEND_TEST(SnapshotTest, MapPartialSnapshot);
-    FRIEND_TEST(SnapshotTest, MapSnapshot);
     FRIEND_TEST(SnapshotTest, Merge);
     FRIEND_TEST(SnapshotTest, MergeFailureCode);
     FRIEND_TEST(SnapshotTest, NoMergeBeforeReboot);
@@ -583,7 +575,7 @@ class SnapshotManager final : public ISnapshotManager {
     // caller is responsible for ensuring that the snapshot is unmapped.
     bool DeleteSnapshot(LockedFile* lock, const std::string& name);
 
-    // Unmap a snapshot device previously mapped with MapSnapshotDevice().
+    // Unmap a snapshot device.
     bool UnmapSnapshot(LockedFile* lock, const std::string& name);
 
     // Unmap a COW image device previously mapped with MapCowImage().
@@ -680,6 +672,7 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Note that these require the name of the device containing the snapshot,
     // which may be the "inner" device. Use GetsnapshotDeviecName().
+
     bool QuerySnapshotStatus(const std::string& dm_name, std::string* target_type,
                              DmTargetSnapshot::Status* status);
     bool IsSnapshotDevice(const std::string& dm_name, TargetInfo* target = nullptr);
@@ -727,7 +720,6 @@ class SnapshotManager final : public ISnapshotManager {
     std::string GetForwardMergeIndicatorPath();
     std::string GetOldPartitionMetadataPath();
     std::string GetBootSnapshotsWithoutSlotSwitchPath();
-    std::string GetSnapuserdFromSystemPath();
     std::string GetSnapuserdModeHintFilePath();
 
     bool HasForwardMergeIndicator();
@@ -787,9 +779,6 @@ class SnapshotManager final : public ISnapshotManager {
 
     // Unmap a dm-user device through snapuserd.
     bool UnmapDmUserDevice(const std::string& dm_user_name);
-
-    // Unmap a dm-user device for user space snapshots
-    bool UnmapUserspaceSnapshotDevice(LockedFile* lock, const std::string& snapshot_name);
 
     CancelResult TryCancelUpdate();
     CancelResult IsCancelUpdateSafe(UpdateState state);
@@ -872,8 +861,7 @@ class SnapshotManager final : public ISnapshotManager {
     // Helper of UpdateUsesSnapuserd
     bool UpdateUsesSnapuserd(LockedFile* lock);
 
-    // Locked and unlocked functions to test whether the current update uses
-    // userspace snapshots.
+    // Check if current update uses userspace snapshots
     bool UpdateUsesUserSnapshots(LockedFile* lock);
 
     // Check if io_uring API's need to be used
@@ -907,9 +895,6 @@ class SnapshotManager final : public ISnapshotManager {
     // Set read-ahead size during OTA
     void SetReadAheadSize(const std::string& entry_block_device, off64_t size_kb);
 
-    // Returns true post OTA reboot if legacy snapuserd is required
-    bool IsLegacySnapuserdPostReboot();
-
     // Returns true if dm_name device has ublk device as parent
     bool IsParentUblkDevice(const std::string& dm_name);
 
@@ -923,7 +908,6 @@ class SnapshotManager final : public ISnapshotManager {
     std::unique_ptr<LpMetadata> old_partition_metadata_;
     std::optional<bool> is_snapshot_userspace_;
     std::optional<bool> is_snapshot_ublk_;
-    std::optional<bool> is_legacy_snapuserd_;
 };
 
 }  // namespace snapshot

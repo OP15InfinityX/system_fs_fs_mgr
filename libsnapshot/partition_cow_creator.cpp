@@ -155,50 +155,50 @@ bool WriteExtent(DmSnapCowSizeCalculator* sc, const chromeos_update_engine::Exte
 }
 
 std::optional<uint64_t> PartitionCowCreator::GetCowSize() {
-    if (using_snapuserd) {
-        if (update == nullptr || !update->has_estimate_cow_size()) {
-            LOG(ERROR) << "Update manifest does not include a COW size";
-            return std::nullopt;
-        }
+    if (!using_snapuserd) {
+        // WARNING: The origin partition should be READ-ONLY
+        const uint64_t logical_block_size = current_metadata->logical_block_size();
+        const unsigned int sectors_per_block = logical_block_size / kSectorSize;
+        DmSnapCowSizeCalculator sc(kSectorSize, kSnapshotChunkSize);
 
-        // Add an extra 2MB of wiggle room for any minor differences in labels/metadata
-        // that might come up.
-        auto size = update->estimate_cow_size() + 2_MiB;
-
-        // Align to nearest block.
-        size += kBlockSize - 1;
-        size &= ~(kBlockSize - 1);
-        return size;
-    }
-
-    // WARNING: The origin partition should be READ-ONLY
-    const uint64_t logical_block_size = current_metadata->logical_block_size();
-    const unsigned int sectors_per_block = logical_block_size / kSectorSize;
-    DmSnapCowSizeCalculator sc(kSectorSize, kSnapshotChunkSize);
-
-    // Allocate space for extra extents (if any). These extents are those that can be
-    // used for error corrections or to store verity hash trees.
-    for (const auto& de : extra_extents) {
-        if (!WriteExtent(&sc, de, sectors_per_block)) return std::nullopt;
-    }
-
-    if (update == nullptr) return sc.cow_size_bytes();
-
-    for (const auto& iop : update->operations()) {
-        const InstallOperation* written_op = &iop;
-        InstallOperation buf;
-        // Do not allocate space for extents that are going to be skipped
-        // during OTA application.
-        if (iop.type() == InstallOperation::SOURCE_COPY && OptimizeSourceCopyOperation(iop, &buf)) {
-            written_op = &buf;
-        }
-
-        for (const auto& de : written_op->dst_extents()) {
+        // Allocate space for extra extents (if any). These extents are those that can be
+        // used for error corrections or to store verity hash trees.
+        for (const auto& de : extra_extents) {
             if (!WriteExtent(&sc, de, sectors_per_block)) return std::nullopt;
         }
+
+        if (update == nullptr) return sc.cow_size_bytes();
+
+        for (const auto& iop : update->operations()) {
+            const InstallOperation* written_op = &iop;
+            InstallOperation buf;
+            // Do not allocate space for extents that are going to be skipped
+            // during OTA application.
+            if (iop.type() == InstallOperation::SOURCE_COPY && OptimizeSourceCopyOperation(iop, &buf)) {
+                written_op = &buf;
+            }
+
+            for (const auto& de : written_op->dst_extents()) {
+                if (!WriteExtent(&sc, de, sectors_per_block)) return std::nullopt;
+            }
+        }
+
+        return sc.cow_size_bytes();
     }
 
-    return sc.cow_size_bytes();
+    if (update == nullptr || !update->has_estimate_cow_size()) {
+        LOG(ERROR) << "Update manifest does not include a COW size";
+        return std::nullopt;
+    }
+
+    // Add an extra 2MB of wiggle room for any minor differences in labels/metadata
+    // that might come up.
+    auto size = update->estimate_cow_size() + 2_MiB;
+
+    // Align to nearest block.
+    size += kBlockSize - 1;
+    size &= ~(kBlockSize - 1);
+    return size;
 }
 
 std::optional<PartitionCowCreator::Return> PartitionCowCreator::Run() {

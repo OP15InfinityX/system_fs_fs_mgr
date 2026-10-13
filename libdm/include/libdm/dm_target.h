@@ -256,21 +256,6 @@ class DmTargetSnapshot final : public DmTarget {
     uint64_t chunk_size_;
 };
 
-// snapshot-origin will read/write directly to the backing device, updating any
-// snapshot devices with a matching origin.
-class DmTargetSnapshotOrigin final : public DmTarget {
-  public:
-    DmTargetSnapshotOrigin(uint64_t start, uint64_t length, const std::string& device)
-        : DmTarget(start, length), device_(device) {}
-
-    std::string name() const override { return "snapshot-origin"; }
-    std::string GetParameterString() const override { return device_; }
-    bool Valid() const override { return true; }
-
-  private:
-    std::string device_;
-};
-
 class DmTargetCrypt final : public DmTarget {
   public:
     DmTargetCrypt(uint64_t start, uint64_t length, const std::string& cipher,
